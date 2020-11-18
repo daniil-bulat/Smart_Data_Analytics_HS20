@@ -1,0 +1,745 @@
+---
+title: "Writing Right"
+subtitle: "Evaluating the alleged political shift of Neue Zürcher Zeitung"
+author: "Daniil Bulat, Kevin Hardegger, Christoph Heinimann"
+date: "03/06/2020"
+abstract: "In recent years, the Neue Zürcher Zeitung (NZZ), a major newspaper based in Switzerland, has come under fire from allegations that its content and political view have shifted increasingly to the political right. This paper examines these claims by analyzing headlines and teasers of NZZ articles based on their sentiment and evaluates if such a shift truly came into effect. For this, a total of 17'095 articles of the front pages of nzz.ch between 2013 and 2020 are scraped from the web. To test the claims made, the data is filtered into two topics, immigration and the far-right German party Alternative für Deutschland (AfD), which is then submitted to detailed exploratory analysis. The results show that neither a specific trend nor pattern can be found that would justify the accusations. On the contrary, the findings suggests that, if anything, a shift in the opposite direction seems to be occurring."
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+  html_document:
+    df_print: paged
+    toc: yes
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(error = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+
+# loading packages 
+packages = c("dplyr", "tidyverse", "quanteda", "readtext", 
+              "ggplot2", "here", "tidytext", 
+              "textdata", "quanteda.dictionaries",
+              "readr", "tibble", "cld3", "ggplot2", 
+              "sentimentr", "forcats",  "stringr", "XML", "tidyr", 
+              "knitr", "kableExtra", "DT", "scales", "pander", "caret")
+ 
+sapply(packages, require, character.only = TRUE)
+
+# read data 
+data <- read_csv(here("scraped_nzz_csv","nzz_2020_2013.csv"))
+
+# change Date columns to date type
+data = data %>%
+  mutate(Date_Link = as.Date(data$Date_Link, "%d. %m. %Y")) %>%
+  mutate(Date = as.Date(data$Date, "%d. %m. %Y"))
+
+# remove duplicates
+data = data[!duplicated(data$Title),]
+
+# use Date_Link value where Date values are missing
+data$Date[is.na(data$Date)] <- data$Date_Link[is.na(data$Date)]
+
+# apply IDs
+data <- data %>%
+  mutate(ID = seq.int(nrow(data)))
+
+# recode "False" entries in Teaser to ""
+data$Teaser <- recode(data$Teaser, "False"="", .default = data$Teaser)
+
+# mutate Text column combining Title and Teaser & add monthYear 
+data = data %>%
+  mutate(Text = paste(Title, Teaser, sep = " ")) %>%
+  mutate(monthYear = format(Date, "%Y-%m")) %>%
+  mutate(Year = format(Date, "%Y"))
+
+# remove Title, Teaser and Date_Link columns
+data = data[,-(2:4)] # You might encounter the error "Unknown or uninitialised column: `Date_Link`" from here on out. This appears to be an error with the diagnostics tool in RStudio, not our code specifically (see https://stackoverflow.com/questions/39041115/fixing-a-multiple-warning-unknown-column).
+
+# create random sample for labeling
+# set.seed(1234)
+# 
+# rows <- sample(nrow(data))
+# 
+# write.csv(data[rows, ],
+#           file="labeled_set.csv",
+#           fileEncoding = "utf-8",
+#           row.names = FALSE)
+
+# combine with labeled data set
+labeled = read_csv("labeled_set.csv")
+
+# join labeled columns to main data set
+data = left_join(data, labeled, by = "ID")
+
+# delete & remove labeled for tidiness reasons
+rm(labeled)
+
+```
+
+```{r ML setup}
+# remove NA values to create training set
+dataTrain = data %>%
+  mutate(Text = as.character(data$Text)) %>%
+  filter(!is.na(immi_label)) # filtering for one of the two labels is enough, as the same rows are labeled
+
+# creating corpus   
+train_corpus = corpus(dataTrain$Text)
+
+# apply tfidf
+dfm_tfidf =  dfm(train_corpus,
+                 remove=stopwords("german"),
+                 remove_url=TRUE,
+                 remove_punct=TRUE,
+                 split_hyphens=TRUE,
+                 remove_symbols=TRUE,
+                 remove_numbers=TRUE,
+                 verbose=TRUE) %>%
+  dfm_trim(min_docfreq = 3,
+           verbose=TRUE) %>%
+  dfm_tfidf()
+
+# dfm_tfidf
+
+## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## ## 
+## ## ## ##  Testing models ## ## ## ## 
+#
+# set seet for partitioning, ratio 4:1
+# set.seed(1234)
+# trainIndex= createDataPartition(dataTrain$immi_label,
+#                                   p = 0.8,
+#                                   list = FALSE,
+#                                   times = 1) %>%
+#   as.numeric()
+# 
+# 
+# # apply partitioning on Immi set
+# trainImmi <- dfm_tfidf[trainIndex,]
+# testImmi <- dfm_tfidf[-trainIndex,]
+# 
+# # apply partitioning on AFD set
+# trainAFD <- dfm_tfidf[trainIndex,]
+# testAFD <- dfm_tfidf[-trainIndex,]
+# 
+# 
+# # as dataframe 
+# trainImmi<- trainImmi%>%
+#   as.matrix() %>%
+#   as.data.frame()
+# 
+# testImmi <- testImmi %>%
+#   as.matrix() %>%
+#   as.data.frame()
+# 
+# trainAFD<- trainAFD%>%
+#   as.matrix() %>%
+#   as.data.frame()
+# 
+# testAFD <- testAFD %>%
+#   as.matrix() %>%
+#   as.data.frame()
+# 
+# # create response frames 
+# trainResponseImmi <- as.factor(dataTrain$immi_label[trainIndex])
+# testResponseImmi <- as.factor(dataTrain$immi_label[-trainIndex])
+# 
+# trainResponseAFD <- as.factor(dataTrain$afd_label[trainIndex])
+# testResponseAFD <- as.factor(dataTrain$afd_label[-trainIndex])
+# 
+# train control = none
+
+trctrl <- trainControl(method = "none")
+
+############## Train & Test Models ############## 
+
+
+## ## ##  SVM Immi ## ## ## 
+
+# svm Immi model
+# svm_mod_Immi <- train(x = trainImmi,
+#                        y = trainResponseImmi,
+#                        method = "svmLinearWeights2",
+#                        trControl = trctrl,               
+#                        tuneGrid = data.frame(cost = 1, 
+#                                              Loss = 0, 
+#                                              weight = 1))
+# svm Immi prediction results
+
+# svmPredImmi <- predict(svm_mod_Immi,             
+#                           newdata = testImmi)
+
+# svm_cm_Immi <- confusionMatrix(svmPredImmi, testResponseImmi, mode = "prec_recall")
+# svm_cm_Immi
+
+## ## ##  SVM AFD ## ## ##  
+# svm AFD model
+# svm_mod_AFD <- train(x = trainAFD,
+#                       y = trainResponseAFD,
+#                       method = "svmLinearWeights2",
+#                       trControl = trctrl,               
+#                       tuneGrid = data.frame(cost = 1, 
+#                                             Loss = 0, 
+#                                             weight = 1))
+# svm AFD rediction results
+
+# svmPredAFD<- predict(svm_mod_AFD,             
+#                        newdata = testAFD)
+
+# svm_cm_AFD <- confusionMatrix(svmPredAFD, testResponseAFD, mode = "prec_recall")
+# svm_cm_AFD
+
+############## Random Forest ############## 
+## ## ## RF Immi ## ## ## 
+# RF Immi model
+# rf_mod_Immi <- train(x = trainImmi, 
+#                       y = trainResponseImmi, 
+#                       method = "ranger",
+#                       trControl = trctrl,
+#                       tuneGrid = data.frame(mtry = floor(sqrt(dim(trainImmi)[2])),
+#                                             splitrule = "gini",
+#                                             min.node.size = 1))
+# 
+# # RF Immi prediction Results
+# 
+# rfPredImmi<- predict(rf_mod_Immi,
+#                          newdata = testImmi)
+# 
+# rf_cm_Immi = confusionMatrix(rfPredImmi, testResponseImmi, mode = "prec_recall")
+# rf_cm_Immi
+# 
+# 
+# ## ## ## RF AFD ## ## ## 
+# 
+# # RF AFD model
+# rf_mod_AFD <- train(x = trainAFD, 
+#                       y = trainResponseAFD, 
+#                       method = "ranger",
+#                       trControl = trctrl,
+#                       tuneGrid = data.frame(mtry = floor(sqrt(dim(trainAFD)[2])),
+#                                             splitrule = "gini",
+#                                             min.node.size = 1))
+# 
+# # RF AFD prediction Results
+# 
+# rfPredAFD<- predict(rf_mod_AFD,
+#                          newdata = testAFD)
+# 
+# rf_cm_AFD<- confusionMatrix(rfPredAFD, testResponseAFD, mode = "prec_recall")
+# rf_cm_AFD
+
+############## Predict Values ############## 
+
+## ## ##  Prepare training Set ## ## ## 
+# transform and refactor
+train_df = dfm_tfidf  %>%
+  as.matrix() %>%
+  as.data.frame()
+
+train_response_Immi <- as.factor(dataTrain$immi_label)
+
+train_response_afd = as.factor(dataTrain$afd_label)
+
+# train Immi SVM model
+svm_mod_Immi = train(x = train_df,
+                y = train_response_Immi,
+                method = "svmLinearWeights2",
+                trControl = trctrl,               
+                tuneGrid = data.frame(cost = 1, 
+                                      Loss = 0, 
+                                      weight = 1))
+
+# train AFD SVM model
+svm_mod_afd = train(x = train_df,
+                y = train_response_afd,
+                method = "svmLinearWeights2",
+                trControl = trctrl,               
+                tuneGrid = data.frame(cost = 1, 
+                                      Loss = 0, 
+                                      weight = 1))
+
+
+## ## ##  Prepare Prediction Set ## ## ## 
+# prepare Prediction data frame
+dataText = data %>%
+  mutate(Text = as.character(data$Text))
+
+# create corpus
+data_corpus_text = corpus(data$Text)
+
+# create prediction dfm 
+dfm_text =  dfm(data_corpus_text,
+                stem=TRUE,
+                remove=stopwords("de"),
+                remove_punct=TRUE) %>%
+  dfm_match(featnames(dfm_tfidf)) %>% 
+  as.matrix() %>%
+  as.data.frame()
+
+## ## ## Predict Values ## ## ## 
+# predict values
+svm_pred_Immi <- predict(svm_mod_Immi,
+                    newdata = dfm_text)
+
+svm_pred_afd = predict(svm_mod_afd,
+                       newdata = dfm_text)
+# add to test data set
+data$pred_Immi = svm_pred_Immi
+
+data$pred_afd = svm_pred_afd
+
+## checking ML Results
+# ImmiResults=data %>%
+#   filter(str_detect(pred_Immi, "1"))
+# 
+# afdResults=data %>%
+#   filter(str_detect(pred_afd,"1") | str_detect(afd_label,"1"))
+
+``` 
+
+```{r quanteda setup}
+# create corpus
+data_corpus <- corpus(data, docid_field = "ID", text_field = "Text")
+
+# create tokens
+data_qtokens <- data_corpus %>%
+  tokens(remove_punct = TRUE,
+         remove_numbers = TRUE,
+         remove_symbols = TRUE) %>%
+  tokens_tolower(keep_acronyms = TRUE) %>%
+  tokens_replace(pattern = c("nicht", "nichts", "kein",
+                                                    "keine", "keinen"),
+                                  replacement = rep("not", 5)) %>% # replacement is necessary as the quanteda version of Rauh was not coded as a regex dictionary and only knows "not" as the negation valence shifter. Christian Rauh suggests solving this by making these replacements, which correspond in effect to the valence shifters the regex version looks for.
+  tokens_remove(stopwords("de"))
+
+# apply dictionary, starting with negations. This replaces hits with "positive", "negative", "neg_positive" and "neg_negative"
+data_qtokens_rauh <- data_qtokens %>%
+  tokens_lookup(dictionary = data_dictionary_Rauh[c("neg_positive","neg_negative")], exclusive = FALSE) %>% #this handles negations first and prevents them from being evaluated again by positive/negative. This way, "not good" returns only "neg_positive" and not "neg_positive", "negative", "positive"
+  tokens_lookup(dictionary = data_dictionary_Rauh, exclusive = FALSE)
+
+# create dfm 
+data_dfm_rauh <- dfm(data_qtokens_rauh, verbose = TRUE)
+
+# convert dfm to tbl
+data_rauh <- tidy(data_dfm_rauh) %>%
+  mutate(document = as.numeric(document)) %>%
+  rename(ID = document) %>%
+  filter(term %in% c("negative", "positive", "neg_positive", "neg_negative")) %>%
+  arrange(ID) %>%
+  pivot_wider(id_cols = ID, names_from = term, values_from = count)
+
+# turn NAs into 0
+data_rauh[is.na(data_rauh)] <- 0
+
+# total number of dictionary hits
+hits <- sum(data_rauh[,2:5])
+
+# add neg_positive to negative and neg_negative to positive
+data_rauh <- data_rauh %>%
+  mutate(sentiment = (positive + neg_negative) - (negative + neg_positive))
+
+data_rauh <- data_rauh[,-(2:5)]
+
+data_rauh <- left_join(data, data_rauh)
+
+# turn NAs into 0
+data_rauh[is.na(data_rauh)] <- 0
+```
+# Introduction
+After the appointments of Eric Gujer, a well known conservative, as editor-in-chief of the Swiss newspaper "Neue Zürcher Zeitung" (NZZ) in 2015 and René Scheu as the head editor of its feature section in 2016, followed by multiple departures by or firings of other editors, NZZ was criticized by some peer publications to have embarked on a shift towards the political right (called a "Rechtsruck" in German).^[See e.g. Surber, 12.10.2017; Daum & Shaller, 16.12.2017; Aschenbrenner et al., 2017; later prominently Brandt, 11.07.2019.] This paper will try to evaluate that claim by analyzing the front page of NZZ's online publication "nzz.ch", specifically its titles and teasers, in the time frame from 2013 to 2020.
+
+The theory behind these allegations usually includes that NZZ, in trying to capture a greater portion of the German newspaper market, embarked on the course of catering to a more politically right-leaning audience in Germany.^[Schmidt, 2018.] Cornerstone of the more recent debate is a 2019 nzz.ch article concerning migration and population statistics in German towns.^[Rasch, 2019a.] This article made headlines for its use of the terms "Urdeutsche" ("native Germans") and "Biodeutsche" ("bio-Germans"), both now struck from the article but preserved in a related tweet by its author^[Rasch, 2019b.]. As these terms are generally considered to be language of the far right, their use in reputable main-stream publications reignited the controversy that started with the personnel shuffle of 2015-2017. Especially problematic was the fact that Hans-Georg Maaßen, former head of the German domestic intelligence agency "Verfassungsschutz" disgraced after his political views became considered extreme and too close to the AfD, endorsed it and NZZ in general, claiming NZZ represented a form of "Westfernsehen" ("western television") to the German press.^[Maaßen, 2019.] "Westfernsehen" was a term used by East-Germans before the reunification of Germany: At that time, people in East Germany sought access to western media to escape the rampant propaganda of their soviet government. The comparison sparked outrage^[see e.g. Mäurer, 2019; Niggemeier, 2019.] and raised the question whether this article was just a small piece in a much larger attempt to appeal to a more right-wing, even AfD-friendly readership that goes far beyond hard-core articles such as the one at the center of controversy. At the same time, Gujer, the aforementioned head editor of NZZ, embraced the term "Westfernsehen" and saw it as a sign that NZZ's critical perspective, which frequently focuses on German Chancellor Angela Merkel and her refugee policy, was recognized.^[See also Binswanger, 2019, von Matt, 2019, and Obrist, 2019, in addition to the previous.] A recent study seems to confirm these suspicions to a certain extent, showing that NZZ is very popular with Twitter accounts close to the AfD for their coverage of Angela Merkel, Islam and the refugee crisis.^[Rauchfleisch et al., 2017, p. 5.]
+
+That is where this paper comes in. To judge whether NZZ has really shifted its political tone over the recent years, this paper will evaluate the two anchor topics of this discourse: Immigration, one of the the core issues on which AfD proponents seem to find support in NZZ reporting, and the AfD itself, part of the purported new target audience. Should reporting on immigration have shifted significantly to the negative, this can be taken as an indication of NZZ appealing to that new audience. Same goes for AfD, should coverage of the party have become better over time.
+
+Instead of immigration, there of course are other topics that could also be evaluated by this paper, like Angela Merkel or Islam. Migration and, specifically, the refugee crisis, however, seem to be at the center of both the AfD's and Eric Gujer's critique of Merkel. The Islam debate, meanwhile, appears mostly as a proxy to that same topic of migrants and refugees from Africa and the Middle East, a thematic complex that without doubt pervades discourse on the political right more so than on the left. Analyzing immigration seems to be the best starting point when trying to make a summary judgement, which, considering constraints of time and scope, this paper will have to resort to. At the same time, this opens up opportunities for later research, to see how NZZ's position could be modeled more accurately on individual sub-topics like immigration from Eastern Europe, integration of Muslims in Western society or the Dublin-Regulation crisis.
+
+Capturing a newspaper's political bent can be approached from both a qualitative as well as a quantitative angle. Though a qualitative analysis might be considered most exact when it comes to discerning the subtleties that come with politics and political language, owing to the sheer volume of a newspaper's publications, any realistic qualitative inquiry would produce a result of fairly limited generalisability. When looking to make a summary evaluation of the broader trends of a newspaper across years, quantitative analysis appears to be the only viable option.
+
+# Hypothesis
+The central hypothesis this paper puts forward is that *NZZ has undergone a shift to the political right in recent years*.
+
+To discern the political stance, or rather the political trajectory of a newspaper from a quantitative standpoint is no easy task. This paper can not make the claim to be able to conclusively establish the political position  of a publication as vast and diverse as NZZ. This paper can, however, attempt to confirm or refute the allegations made against NZZ that, as a consequence of their being right or wrong, can imply a shift in political position. In other words, instead of quantitatively reasoning clear judgement on "right", "left" or "center", this paper will instead try to evaluate the merit of allegations made against NZZ. If they are found to be true, this can be taken as an indicator that such a shift to the political right has taken place. Accordingly, this paper will attempt to gauge political positions from the positions on certain key issues, specifically the sentiment with which these issues are associated. The relevant issues and their significance to political orientation are derived from the allegations made against NZZ and will focus on two topical clusters: Immigration and the German political party "Alternative für Deutschland" or "AfD".
+
+Consequently, the central hypothesis is predicated on two secondary hypotheses:
+
+1. *Reporting on immigration topics has become more negative over time.*
+2. *Reporting on AfD topics has become more positive over time.*
+
+Analysis will not only focus on the sentiment with which these topics are written about, but also what weight or "influence" these topics have on the overall sentiment of NZZ. This is done under the assumption that a political shift can not only imply a shift in how certain topics are reported on, but also how much weight (in sentiment) is lent to that reporting. This accounts not only for changes in sentiment, but changes in over all contentual focal point as well.
+
+Therefore, a further two secondary hypotheses are raised: 
+
+3. *The influence of immigration topics on overall sentiment has increased over time.*
+4. *The influence of AfD topics on overall sentiment has increased over time.*
+
+How this quantitative analysis is to be conducted is the subject of the following chapter.
+
+# Methodology
+## The Analysis
+To find out whether sentiment on our two anchor topics has shifted, we not only look at how sentiment on these topics shifts, but reference it with the sentiment of NZZ as a whole. After all, when trying to qualify the changes in individual topics, we first need to understand how NZZ behaved over the years to account for macro-changes affecting our micro-analysis. At the same time, establishing this baseline allows us to understand how much immigration and the AfD affect the publication as a whole, i.e. when immigration or AfD sentiment makes up a large part of the sentiment of all of NZZ. Using only the number of articles as a point of comparison appears inadequate, as a long, loaded front page article can carry much greater importance than a few shorter newsflashes on e.g. AfD polling results ever could. Using sentiment "influence" in addition to sentiment fluctuation on the topics themselves, however, gives a more accurate representation of the emotional "weight" a topic has on NZZ on any given day. Influence is irrespective of polarity, as it does not matter whether a topic "makes" NZZ more positive or negative, it only matters whether it has considerable sway over the tone NZZ communicates. While this does not directly convey information on the political stance of NZZ, it gives insight into whether a topic has become more or less important to NZZ's overall message. As will be discussed below in "[The Choice of Dictionary]", this allows for more reliable analysis than pure polarity as well.
+
+## The Scraping and Data Preparation Process
+### The Process
+As NZZ does not offer an API to access its online content, the web scraping process of the NZZ website is an integral part of our research paper. The scraping itself did not contribute to the analysis directly, nevertheless, it was crucial to build a well-functioning web scraper to get a large enough data sample size, with correct date labels corresponding to the article headlines and teasers.
+
+For our approach to scrape the necessary data, we chose to use [Wayback Machine, offered by archive.org](https://archive.org/web/), a digital library of websites and other cultural artifacts in digital form. It has over 20 years of web history accessible through its platform, including thousands of historical versions of nzz.ch.
+
+In a first step, we downloaded all 4’885 available historical HTML files of nzz.ch, spanning March 2013 to April 2020. 
+
+Then, we used the Selenium web scraping package in Python to extract relevant information from the HTML files. The structure and layout of nzz.ch have evolved over time and, consequently, the HTML code underwent constant changes. Therefore, the web scraper had to be continuously supervised and adjusted manually to the changes in the HTML code.  We only concentrated on the first few article blocks of the website, both to minimize necessary scraper adjustments (as different blocks frequently use different tags for titles and teasers, previously leading to mix-ups) and to increase the likelihood that we only scrape the information that is most relevant to our analysis. Data exploration yields that articles gathered by this approach predominately feature political topics and opinion pieces, mostly excluding the sports, technology, weather or celebrity sections found further down the page.
+
+In the end, we used ten versions of the initial web scraper, each with adjustments to the tag names that changed over the years. By doing this, we extracted 17'095 article headlines (excluding duplicates) from 2013 to 2020 from the HTML files. All scraped headlines include a date and some also include a teaser of roughly two to three sentences. Since we later merge the title and teaser of each article into one final text block, an article not having a teaser is unproblematic and only means the length of the final text blocks may vary. While the fact that such differences exit gives some articles greater weight (as for them more text is analysed), we consider this adequate, as the choice of whether or not to provide a teaser to an article is an expression of the relevance a publication places on an article. Therefore, allowing articles with a teaser to have greater weight than those without can be considered an approximate reflection of the contentual focus intended by NZZ on a particular day.
+
+The code itself can be found in [nzz_html_scraper.py on the project's GitHub page](https://github.com/Larostos/qta2020).
+
+## The Choice of Dictionary
+"Rauh" was developed by Christian Rauh in 2018. It is built upon the "Sentiment Wortschatz" and "GermanPolarityCues" dictionaries, which already provided a thematically broad and numerically large volume of terms, spanning German verbs, adjectives and nouns. Christian Rauh combined both sets, created bi-gram negations of each term and manually adjusted the combined list with an eye to optimizing for German political language (e.g. by removing politically ambiguous terms).^[Rauh, 2018, pp. 322 et seq.] After augmentation, the resulting dictionary exhibited slightly more discriminatory power compared to its source dictionaries, while being less prone to neutrality biases, showing a greater distribution of sentiment.^[Rauh, 2018, pp. 336.] The dictionary encompasses `r summary(data_dictionary_Rauh[["positive"]])[1]` positive and `r summary(data_dictionary_Rauh[["negative"]])[1]` negative terms, including transformations, as well as negations of both positive ("not good") and negative ("not bad") terms.
+
+Owing to its relatively large size, the fact that is has been validated relatively recently and it is specifically geared towards German political language, Rauh appears a natural choice for political language analysis such as ours. The fact that it also includes negations appears as an added bonus, enabling more accurate dictionary application.
+There are, however, a number of caveats attached to a dictionary approach generally and this choice of dictionary specifically:
+
+1. Contextual information can not adequately be accounted for by a dictionary. E.g. while the word "relaxing" could generally be connoted positively in most contexts, "relaxing" regulatory standards is emotionally fairly ambiguous unless it is clarified what kind of regulation is at issue. Consequently, not all dictionary entries can be taken at face value and, disregarding context, might mislead. While such considerations have been made by the dictionary's author^[Rauh, 2018, pp. 328.], they remain something to keep in mind when evaluating our results. To deal with this issue, we believe our approach to select specific topics for analysis should adequately account for contextual ambiguity. Looking at specific topics individually should normalize for context to a certain extent, as we assume language use in an individual topic should be relatively uniform. As we then look not at individual articles in a moment of time but at trends over months and years, relative changes in sentiment should still provide meaningful information.
+2. Related to the previous point: Sentiment alone is no certain indicator of political stance. Even when context becomes clearer (e.g. "relaxing immigration restrictions"), whether the text content is a positive or a negative thing is only apparent in the mind of the author. And even if the political stance of the author can more clearly be discerned (compare the sentences "A great step for border security." and "A great step for open borders."), it can still result in the same sentiment being assigned to texts diametrically opposed in their meaning. Besides in-text context, therefore, accounting for the background and perspective of authors as hidden semantic layers remains an issue. However, while sentiment analysis might fail in some individual cases, when working at scale we believe the dictionary will produce more reliable results. We hope to mitigate these risks with sheer volume of observations. We assume that political issues an author is opposed to will feature more negatively connated expressions and vice versa on average, crowding out instances where sentiment alone could not make accurate predictions. At the same time, looking at the influence a topic has on the sentiment of the entire publication should reveal peculiarities associated with these topics irrespective of whether the qualification of sentiment is absolutely correct, as our influence metric ignores the polarity of sentiment and only considers the presence of sentiment as such.
+3. Rauh itself only features general positive (+1) and general negative (-1) connotations. Even though its source dictionaries were more fine-grained, this limitation had to be made as these source dictionaries were based on online review data, which did not provide sufficiently accurate polarity weights in relation to political language. Accordingly, while still communicating a rough estimate of sentiment, the nuances of expressive emphasis can not be expected to accurately be reflected in our analysis.
+4. In validating the dictionary against different political texts, Christian Rauh noted how absolute sentiment was often an inaccurate indicator, e.g. meaning that a sentiment score of "0" can not be taken as true neutrality in all contexts.^[Rauh, 2018, pp. 336.] This holds especially true when analyzing different issues which might feature deviating language patterns. Accordingly, our analysis will have to rely on relative changes in sentiment more so than on absolute values. As our central hypothesis requires establishing a "shift" in political position over time, this limitation does not present a considerable obstacle.
+
+We believe that these are drawbacks we can either account for, mitigate or simply be aware of when conducting our analysis, so that Rauh remains viable for our purposes.
+
+# Analysis
+## Preprocessing and Dictionary Application
+Any analysis begins with pre-processing. For this, deduplication of the extracted data was most important, as the same article could appear in more than one HTML file, because an article often remained on the front page of nzz.ch for more than one day. After deduplication, this left us with a corpus of `r nrow(data)` articles.
+
+As Rauh was added to the quanteda.dictionaries package upon its release, we used quanteda's dictionary suite to apply it to our data. This also allowed us to make use of the included negations more easily, increasing accuracy. The dictionary returned positive, negative, negative-positive and negative-negative sentiment for cross-referenced terms, finding a total of 45'572 hits in our data. After applying the dictionary, we calculated a total sentiment per article by first adding negative-positives to negatives and negative-negatives to positives, followed by subtracting the sum of negative sentiment from the sum of positive sentiment per article.
+
+## General Analysis
+```{r}
+# Summarize Monthly Sentiment
+monthSent = data_rauh %>%
+  group_by(monthYear) %>%
+  summarize(Sentiment = sum(sentiment))
+
+# Summarize yearly average Sentiment & absolute sentiment per year
+yearSent = data_rauh %>%
+  group_by(Year) %>%
+  summarize(avgYearSent = sum(sentiment)/12, absSent = sum(sentiment)) %>%
+  ungroup()
+
+# Sum of sentiment by ID
+IDSent <- data_rauh %>%
+  group_by(ID) %>%
+  summarize(valueSent = sum(sentiment)) %>%
+  inner_join(data, by="ID")
+
+# create ID per Month df
+IDperMonth = IDSent %>%
+ count(monthYear, name = "nrID")
+
+```
+
+We begin with a general overview of all articles in the data set. The below figure graphs the absolute sentiment of all newspaper articles in the complete time frame. It is calculated as the total measured positive sentiment minus the total measured negative sentiment, grouped by month and irrespective of content.
+
+```{r}
+# Plot monthSent 
+monthSent %>%
+  ggplot(aes(monthYear, Sentiment, group = 1)) +
+  geom_line(color ="Dodgerblue") +
+  labs(x="Date", title= "Monthly Sentiment") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks = monthSent$monthYear[seq(1, length(monthSent$monthYear), by = 3)])
+```
+
+It becomes apparent that overall the sentiment encountered on nzz.ch in the observed time-frame is consistently negative, experiencing a drastic dip in June 2017. Concerning the negativity, however, we must remember our reservations on Rauh, as it is very possible that a negative sentiment does not necessarily mean that NZZ only reports bad news, for example. Rather, the topics NZZ reports on could be prone to using language Rauh interprets as negative. The drastic dip in 2017, however, remains significant even in the face of this acknowledgement. For a better understanding, the distribution of positive and negative articles is compared. 
+
+```{r}
+#  Percent
+# create Negative Percentage df
+Perc = IDSent %>%
+  group_by(monthYear) %>%
+  mutate(Pos = valueSent>0) %>%
+  mutate(Neg = valueSent<0) %>%
+  summarise(nrNeg = sum(Neg %in% TRUE), nrPos = sum(Pos %in% TRUE)) %>%
+  full_join(IDperMonth, by="monthYear") %>%
+  mutate(NegPercentage = round(nrNeg/nrID*100, 2)) %>%
+  mutate(PosPercentage = round(nrPos/nrID*100, 2))
+
+
+
+Perc %>%
+ ggplot(aes(monthYear, group = 1)) +
+ geom_line(aes(y=NegPercentage), color ="Dodgerblue") +
+ geom_line(aes(y = PosPercentage), color="springgreen2") +
+ labs(x="Month", y = "Share in Percent", title= "Percentage of Negative and Positive Articles") +
+ theme(axis.text.x = element_text(angle = 90)) +
+ scale_x_discrete(breaks = monthSent$monthYear[seq(1, length(monthSent$monthYear), by = 3)])
+ 
+
+``` 
+
+Negative articles clearly outweigh positive ones, as the percentage of the former (in blue), while mostly below 50%, exceeds the latter (in green) in general. It is of note that positive and negative articles don't add up to 100%, as a substantial amount of articles are neutral in sentiment. This neutrality is especially pronounced in a dip in July 2015, followed by a spike in August 2015, where an exceptionally high number of articles with neutral sentiment is followed by an exceptionally low number. This graph also shows that the sentiment drop in July and August of 2017 was not caused by an especially high number of negative articles. Instead, while negative articles were high and positive articles low, the same had already occurred in December of 2016. The difference then seems not to be in the number of negative articles, but in the highly negative sentiment contained in these articles. An exploration of the data around that time reveals many articles on the crisis in Venezuela, but they alone can not cause this dip for which we were unable to find a direct explanation in the data. At this scale and with data of this diversity, spanning hundreds of topics by as many authors, clearly correlating sentiment movements to specific events no longer appears possible.
+
+Nevertheless, with the overall sentiment established, we can move to the main part of our analysis. Having established this baseline, we will analyse specific issues that relate to NZZ's purported political shift. Besides analyzing them on their own, we will also try to connect these findings with the overall sentiment by determining their influence on it.
+
+## Analyzing specific issues
+We chose machine learning to identify relevant articles from our data set for three reasons: First, the volume of data was beyond anything we could have labeled by hand. Second, a previous attempt to identify articles by using regular expressions revealed that even relatively concrete words like "refugee" did not yield highly reliable results. Third, especially with articles related to the AfD it is often a combination of factors that determine their relevance. After the Thuringian government crisis of this year, for example, many articles did not explicitly mention AfD or any of its politicians. At the same time, simply looking for articles related to Thuringia was not an option for obvious reasons. Our hope is that machine learning can find abstract connections we can not as easily make with concrete search terms.
+
+To extract articles corresponding to our topics precisely, we manually labeled 1711 randomly selected articles for both topics. For immigration, we focused on articles related to migration into Europe, excluding for example Mexican migrants to the US. For AfD topics, we focused on major events of past years (the Thuringia election, the national parliamentary election of 2017, the Maaßen controversy), as well as mentions of central figures behind the party and the party itself.
+
+We then apply a Support Vector Machine (SVM) algorithm to classify the other articles. We choose SVM because during testing its accuracy was superior and the number of false negatives lower than with a Random Forest approach. Furthermore, we prefer SVM to other methods such as Naive Bayes (NB), as NB is of a probabilistic nature, whereas SVM is of a geometric nature. Machine learning models work best if their underlying assumptions are fulfilled, and NB treats features as independent, which in our case isn't accurate, as words are contextual. With this in mind, SVM has the potential to find relations that NB may not. As the selection results are quite small, it became viable to review and edit them manually to omit false positives and make sure labeled data is interpreted correctly, resulting in a data set which contains the relevant articles for each topic.
+
+We then use exploratory analysis to search for trends and specific patterns that help test our hypotheses:
+First, we measure overall sentiment by adding up all sentiment values of each topic for each month.
+Second, we calculate the share of the number of negative and positive articles in relation to the total number of articles of each topic per year. 
+Third, we measure the overweight of negative articles by dividing the number of negative articles by the number of positive articles of each topic per year. 
+Lastly, we measure the influence on overall sentiment by aggregating absolute sentiment values for each topic and divide this sum by the total absolute value of all NZZ articles per month. 
+
+### Topic 1: Immigration
+```{r immigration}
+# Look up Sentiment of ID's of search term hits
+IDSent_immi <- IDSent %>%
+  filter(pred_Immi %in% "1" | immi_label %in% "1") 
+
+# remove irrelevant results 
+IDSent_immi = IDSent_immi[-c(235,234,227,223,203,198,196,151,71,61,27,10),]    
+
+
+# Total number of ID_immi per month 
+IDperMonth_immi = IDSent_immi %>%
+ count(monthYear, name = "nrID")
+
+IDperYear_immi = IDSent_immi %>%
+  count(Year, name = "nrID")
+``` 
+
+As a first step, we analyse nzz.ch's reporting on immigration issues. Immigration appears `r nrow(IDSent_immi)` times in the part of our data set which contain sentiment-relevant words; for 12 months of our data, there are no results for immigration-related articles in the data set. The average of these observations carry a sentiment of `r round(mean(IDSent_immi$valueSent), 2)`. The sum of sentiment across the data set is `r sum(IDSent_immi$valueSent)`. Again we recall our reservations concerning Rauh, meaning this negative sentiment does not necessarily translate into NZZ only reporting negatively on immigration; rather, the trends over time within the semantic space of "immigration" will give us information on NZZ's sentiment "trajectory".
+
+``` {r}
+## ## ## Overall Sentiment Immigration ## ## ## 
+
+## Summarize Immigration Sentiment
+# create monthly sentiment dataframe
+monthSent_immi = IDSent_immi %>%
+  group_by(monthYear) %>%
+  summarize(absSent = sum(valueSent)) %>%
+  ungroup()
+
+monthSent_immi %>%
+  ggplot(aes(monthYear, absSent, group=1)) +
+  geom_line(color="mediumorchid") +
+  labs(x="Date", y="Sentiment", title= "Overall Sentiment for Immigration per Month") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks = monthSent_immi$monthYear[seq(1, length(monthSent_immi$monthYear), by = 3)])
+
+```
+
+The chart above presents the monthly sentiment on immigration. Through the years of 2013 to 2020 the overall sentiment tends to move in the same range between +4 and -7.5. However, a rough slump in September 2016 is observable and after this slump the movement pattern is characterized by higher volatility and followed with another dip in January 2018. These dips are caused by a larger number of negative articles than in other months and can not clearly be attributed to singular events. In more recent years volatility seems to flatten out and sentiment is even slightly positive. From this alone, trends over time are not very visible.
+
+```{r}
+## ## ## Percentage Immigration ## ## ## 
+
+# create Percentage of negative Sentiments per year
+Perc_immi = IDSent_immi %>%
+  group_by(Year) %>%
+  mutate(Pos = valueSent>0) %>%
+  mutate(Neg = valueSent<0) %>%
+  summarise(nrNeg = sum(Neg %in% TRUE), nrPos = sum(Pos %in% TRUE)) %>%
+  full_join(IDperYear_immi, by="Year") %>%
+  mutate(NegPercentage = round(nrNeg/nrID*100, 2)) %>%
+  mutate(PosPercentage = round(nrPos/nrID*100, 2)) %>%
+  mutate(Overweight = round(nrNeg/nrPos, 2))
+
+# plot negative Yearly percentage Immi
+Perc_immi %>%
+  ggplot(aes(Year, group = 1)) +
+  geom_line(aes(y = NegPercentage), color ="mediumorchid") +
+  geom_line(aes(y = PosPercentage), color="springgreen2") +
+  labs(x="Year", y="Share in Percent", title= "Proportion of Negative and Positive Articles")
+``` 
+
+This second chart lays out the proportion of articles with negative (violet) and positive sentiment (green). As expected, they tend to move with negative correlation. The graph shows that, with an exception in 2014, negative articles outweigh positive articles almost symmetrically. However, this changes by the year 2019, in which an uptrend of positive articles that begins in 2015 follows through to 2020 where positive articles overtake negative articles. The data in our previous graph shows that this is the time where overall sentiment began to become more positive.
+
+```{r}
+# plot overweight Immi
+Perc_immi %>%
+  ggplot(aes(Year, group = 1)) +
+  geom_line(aes(y = Overweight), color ="mediumorchid") +
+  labs(x="Year", y="Factor", title= "Overweight of Negative Immigration Articles")
+
+```
+
+Dividing positive from negative articles results in a factor by which negative articles exceed positives, showing their proportion more clearly. This figure illustrates this factor for each year and reinforces prior findings. In 2013, the factor begins with a value of 1.5 and rises to the global maximum of `r max(Perc_immi$Overweight)`. It then moves in a downward zig-zag between 1.73 to 2.75 until it reaches a new low at `r min(Perc_immi$Overweight)`  in 2020. This means that in 2020, positive articles are twice as common as negative articles. A down-trend in negative articles is evident, making positive articles more prevalent over the years.
+
+```{r} 
+## ## ##  Influence of Immigration ## ## ## 
+# create DF for Overall absolute Sentiment value
+absValue_IDSent = IDSent%>%
+  group_by(monthYear) %>%
+  summarize(absSent = sum(abs(valueSent)))
+
+# create Influence Immigration df per month
+SentInflu_immi = IDSent_immi %>%
+  group_by(monthYear) %>%
+  summarize(absSent_immi=sum(abs(valueSent))) %>%
+  inner_join(absValue_IDSent) %>%
+  mutate(Influence = round(absSent_immi/absSent*100, 2))
+
+```
+
+As a next step, we will consider how much of an influence the sentiment on immigration has on the overall sentiment on nzz.ch in the respective months.
+
+```{r}
+# plot Influence of Immigration
+SentInflu_immi %>%
+  ggplot(aes(monthYear, Influence, group = 1)) +
+  geom_line(color ="mediumorchid") +
+  labs(x="Date", y="Influence in Percent", title = "Influence of Immigration on Overall Sentiment") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks = SentInflu_immi$monthYear[seq(1, length(SentInflu_immi$monthYear), by = 3)])
+
+```
+
+These results point towards immigration being a constant influence for nzz.ch, albeit of very variable importance. The mean influence of immigration is `r round(mean(SentInflu_immi$Influence), 2)`%. The two spires in 2015 are directly related to the European migrant crisis caused by the Syrian civil war. It is notable, however, that sentiment data in that time-frame is very limited, meaning it did not take many articles to drastically shift overall sentiment. In fact, in August 2015, only `r nrow(filter(data_rauh, monthYear == "2015-08"))` articles carry sentiment, of which `r nrow(filter(IDSent_immi, monthYear == "2015-08"))` relate to immigration, although with higher than average sentiment. Before and after the crisis, influence moves between a range of 0% and 5% and no clear trend is apparent.
+
+```{r AFD}
+# Look up Sentiment of ID's of search term hits
+IDSent_afd <- IDSent %>%
+  filter(pred_afd %in% "1" | afd_label %in% "1" ) 
+
+# remove irrelevant Texts
+IDSent_afd = IDSent_afd[-c(26,27,28,29,30,49,65,66,69,70,71,77,78,79,85,89,90,91,92,93,94),] 
+
+# Total number of ID_afd per month 
+IDperMonth_afd = IDSent_afd %>%
+ count(monthYear, name = "nrID")
+
+IDperYear_afd = IDSent_afd %>%
+  count(Year, name = "nrID")
+``` 
+
+### Topic 2: Alternative für Deutschland
+
+For our second topic concerning the coverage of AfD, the data presents us with a total of `r nrow(IDperMonth_afd)` months of results. In other words, there are 54 months in which no articles related to AfD have been found. The data set contains a total of `r nrow(IDSent_afd)` AfD related articles. The average sentiment of these is `r round(mean(IDSent_afd$valueSent), 2)` and the total sentiment amounts to `r sum(IDSent_afd$valueSent)`.
+
+``` {r}
+## ## ## Overall Sentiment AFD ## ## ## 
+
+# create monthly sentiment dataframe
+monthSent_afd = IDSent_afd %>%
+  group_by(monthYear) %>%
+  summarize(absSent = sum(valueSent)) %>%
+  ungroup()
+
+# plot monthly sentiment
+monthSent_afd %>%
+  ggplot(aes(monthYear, absSent, group=1)) +
+  geom_line(color="darkgoldenrod1") +
+  labs(x="Date", y="Sentiment", title= "Overall Sentiment for AfD per Month") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks = monthSent_afd$monthYear[seq(1, length(monthSent_afd$monthYear), by = 3)])
+
+```
+
+This figure outlines monthly sentiment values for AfD articles. Even though there are a few occasions where sentiment spikes to positive values, overall the sentiment for AfD articles is mostly negative and shifts between 0 and -5 with a mean of `r round(mean(monthSent_afd$absSent), 2)`. Here again, a lack of data becomes apparent, with the biggest positive spike of sentiment being down to only `r nrow(filter(IDSent_afd, monthYear == "2017-04"))` articles, one of which is neutral in sentiment. This drastically limits the significance of these results. More expressive is the drop in September of 2017, for example: There, a total of `r nrow(filter(IDSent_afd, monthYear == "2017-09"))` articles are evaluated, most likely owing to the fact that the national elections, where AfD managed to achieve considerable successes, provided more news, most of which was negative in sentiment. This also shows that sentiment alone can be a bad indicator of actual reporting and more attention must be paid to the number of articles published with a certain sentiment.
+
+```{r}
+## ## ## Percentage AFD ## ## ##
+# create Percentage of negative Sentiments per Year
+Perc_afd = IDSent_afd %>%
+  group_by(Year) %>%
+  mutate(Pos = valueSent>0) %>%
+  mutate(Neg = valueSent<0) %>%
+  summarise(nrNeg = sum(Neg %in% TRUE), nrPos = sum(Pos %in% TRUE)) %>%
+  full_join(IDperYear_afd, by="Year") %>%
+  mutate(NegPercentage = round(nrNeg/nrID*100, 2)) %>%
+  mutate(PosPercentage = round(nrPos/nrID*100, 2)) %>%
+  mutate(Overweight = round(nrNeg/nrPos, 2))
+
+# plot negative percentage afd
+Perc_afd %>%
+  ggplot(aes(Year, group = 1)) +
+  geom_line(aes(y = NegPercentage), color ="darkgoldenrod1") +
+  geom_line(aes(y = PosPercentage), color="springgreen2") +
+  labs(x="Year", y="Share in Percent", title= "Proportion of Negative and Positive Articles")
+```
+
+This next line graph maps out the proportion of the number of negative (orange) and positive (green) articles on AfD. In 2013 to 2015, the number of articles with positive sentiment are clearly higher. However, in 2015 there is only one article for the whole year, carrying positive sentiment, hence resulting in a share of 100%. After that, starting in 2016, this value shifts and negative articles predominate until today. More specifically, in 2016 `r max(Perc_afd$NegPercentage)`% of the articles have negative sentiment values. Moreover, the chart suggests that in 2016 and 2020 there is not one article to be found associated with positive sentiment.
+
+```{r}
+# plot overweight afd
+Perc_afd %>%
+  ggplot(aes(Year, group = 1)) +
+  geom_line(aes(y = Overweight), color ="darkgoldenrod1") +
+  labs(x="Year", y="Factor", title= "Overweight of Negative AfD Articles")
+
+
+```
+
+This next diagram confirms the prevalence of negatively connoted articles. Except for the years 2013 to 2015, during which AfD wasn't of much relevance in German politics, negative articles predominate. In fact, the factor values theoretically reach infinity in 2016 and 2020, as there are no strictly positive articles found for these years. If anything, a trend towards negative reporting on the AfD becomes clear.
+
+```{r} 
+## ## ##  Influence of AFD ## ## ## 
+# create Influence AFD df per month
+SentInflu_afd = IDSent_afd %>%
+  group_by(monthYear) %>%
+  summarize(absSent_afd=sum(abs(valueSent))) %>%
+  inner_join(absValue_IDSent) %>%
+  mutate(Influence = round(absSent_afd/absSent*100, 2))
+
+# plot Influence of AFD
+SentInflu_afd %>%
+  ggplot(aes(monthYear, Influence, group = 1)) +
+  geom_line(color ="darkgoldenrod1") +
+  labs(x="Date", y="Influence in Percent", title = "Influence of AfD on Overall Sentiment") +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_discrete(breaks = SentInflu_afd$monthYear[seq(1, length(SentInflu_afd$monthYear), by = 3)])
+
+```
+
+The last chart depicts the influence AfD had on the overall sentiment of NZZ. There is one big spike visible that reaches `r max(SentInflu_afd$Influence)`%, which is likely related to the case of Hans-Georg Maaßen and his involvement with AfD. However, in general, the influence is rather low, ranging between 0% and 3% with a mean of `r round(mean(SentInflu_afd$Influence),2)`%. Its important to point out that the 52 months with no related articles aren't contained in this chart. For these months, influence would of course be 0%.
+
+# Conclusion
+From the above, it becomes clear that a number of our secondary hypotheses can easily be falsified. Addressing the first two, the opposite even appears to be the case, with reporting on immigration becoming more positive and reporting on AfD more negative in terms of the number of articles written. Both of these secondary hypotheses can therefore clearly be rejected. Addressing the last two, the influence of immigration does not seem to increase substantially over time, with only intermittent spikes appearing where important events occur that would probably receive similar attention by other publications. The influence of AfD topics, at the same time, does seem to increase, which is in line with our fourth secondary hypothesis. It must be considered, however, that AfD as a party only came into under the spotlight in the wake of the refugee crisis in 2015-2016 and saw its first political breakthroughs in the parliamentary elections of 2017. Therefore, its influence on NZZ reporting increasing recently is not of such extraordinary significance.
+
+All in all, the data shows our primary hypothesis can soundly be rejected. Measured by the metrics we defined, no shift to the political right can be discerned from the sentiment expressed in the data analysed. By the standards of this analysis, if anything, NZZ seems to slowly report more positively on immigration and more negatively on the AfD. One possible explanation for the allegations raised is that, although they were raised against NZZ, they might be more related to the persons involved in its publication than the actual output of the newspaper itself.
+
+# Caveats
+Our present analysis only considers titles and, as available, teasers of articles, not the actual content of articles themselves. This has a number of drawbacks:
+
+1. Though NZZ is not known as a regular user of click-bait, titles and teasers often follow a particular style that might not be reflected in the articles they advertise. As their purpose is capturing the reader's attention, they might resort to more drastic language that exaggerates the positions held in the article itself. At the same time, however, as accusations against NZZ also contend that the newspaper looks to cater more to certain audiences, the way NZZ styles these headlines and teasers might be telling of an at least projected political stance all the same, even if it is less emphasized in the content of the articles itself.
+2. Besides that, titles and teasers obviously provide significantly less data than the full text of an article would. Accordingly, this paper only analyses a small snippet of the message NZZ communicates on their website. Any conclusive analysis would have to take into account the full breadth, or at least significantly more, of NZZ's journalistic output.
+3. A lot of our results (like spikes in graphs) are hard to explain, owing in our view mostly to a lack of relevant data. This means that a lot of results don't necessarily express specific real-world happenings, with a lot of spikes being nothing more than noise, drastically limiting our possibilities for interpretation. This appears to be both a shortcoming of the scraper, which quite simply can not capture all of nzz.ch, as well as our machine learning algorithm to identify relevant articles, which we know has missed a number of instances. More sophisticated approaches to both could most likely yield results that can be interpreted with greater confidence.
+
+# References
+Aschenbrenner, C., Assmann, A., Assmann, J., Bartels, K., Benhabib, S., Bitterli, U., Böhme, G., & Böhme, H. (2017). *Protestbrief NZZ Feuilleton* [Open letter]. https://www.persoenlich.com/sites/default/files/filemanager/Protestbrief%20NZZ%20Feuilleton.pdf
+
+Binswanger, D. (2019, July 13). Die neuen Freunde der NZZ. *Republik.ch*. https://www.republik.ch/2019/07/13/die-neuen-freunde-der-nzz
+
+Brandt, H. (11.07.2019). Die NZZ umwirbt deutsche Rechtspopulisten. *Tagesanzeiger*. https://www.tagesanzeiger.ch/kultur/die-lieblingszeitung-der-rechten/story/17731189
+
+Daum, M., & Shaller, C. (16.12.2017). ‘Neue Zürcher Zeitung’: Druck von rechts. *Die Zeit*. https://www.zeit.de/2017/52/neue-zuercher-zeitung-christoph-blocher-rechtsruck
+
+Maaßen, H.-G. (2019, July 9). Hans-Georg Maaßen on Twitter: ‘Für mich ist die NZZ so etwas wie „Westfernsehen“. (hgm) https://t.co/XAom2oKVbR’. *Twitter*. https://twitter.com/HGMaassen/status/1148654208398319622
+
+Mäurer, D. K. (2019, July 17). ‘Neue Zürcher Zeitung’—Profil geschärft—Mit rechten Thesen? *Deutschlandfunk.* https://www.deutschlandfunk.de/neue-zuercher-zeitung-profil-geschaerft-mit-rechten-thesen.2907.de.html?dram:article_id=454110
+
+Niggemeier, S. (2019, July 10). Mit dem ‘Westfernsehen’ sieht man schlechter. *Übermedien*. https://uebermedien.de/39948/mit-dem-westfernsehen-sieht-man-schlechter/
+
+Obrist, H. (2019, July 10). Warum dieser NZZ-Artikel für einen Shitstorm sorgte – und er von Maassen retweetet wurde. *St.Galler Tagblatt*. https://www.tagblatt.ch/international/warum-dieser-nzz-artikel-fuer-einen-shitstorm-sorgte-und-er-von-maassen-retweetet-wurde-ld.1134396
+
+Rasch, M. (2019a, July 9). In deutschen Städten sieht die Mehrheitsgesellschaft ihrem Ende entgegen. *Neue Zürcher Zeitung*. https://www.nzz.ch/international/in-deutschen-staedten-geht-die-mehrheitsgesellschaft-zu-ende-ld.1492568
+
+Rasch, M. (2019b, July 9). Michael Rasch on Twitter: ‘Frankfurt ist erst der Anfang: In deutschen Städten sieht die #Mehrheitsgesellschaft ihrem Ende entgegen https://t.co/1BsI1bTY2n via @nzz #urdeutsche #biodeutsche #Migration #Migrationshintergrund #Ausländer’. *Twitter*. https://twitter.com/raschnzz/status/1148509043180343296
+
+Rauchfleisch, A., Vogler, D., & Eisenegger, M. (2017). *Auf zu neuen Märkten: Der Einfluss Schweizer Medien auf Twitter.* https://www.foeg.uzh.ch/de/analyse/alleanalysen/Auf-zu-neuen-M%C3%A4rkten-Der-Einfluss-Schweizer-Medien-auf-Twitter.html
+
+Rauh, C. (2018). Validating a sentiment dictionary for German political language—A workbench note. *Journal of Information Technology & Politics*, 15(4), 319–343. https://doi.org/10/gdsgns
+
+Schmidt, C. (2018, February 28). NZZ: Warum das Blatt sich wendet. *NDR.de*. https://www.ndr.de/fernsehen/sendungen/zapp/NZZ-Warum-Blatt-sich-wendet,nzz126.html 
+
+Surber, K. (12.10.2017). NZZ: Die Angst geht um an der Falkenstrasse. *Die Wochenzeitung*. https://www.woz.ch/-81a3
+
+von Matt, R. (2019, July 18). Deutschland-Strategie der NZZ - «Von einem Rechtsrutsch ist nichts zu spüren». *Schweizer Radio und Fernsehen (SRF)*. https://www.srf.ch/news/schweiz/deutschland-strategie-der-nzz-von-einem-rechtsrutsch-ist-nichts-zu-spueren
