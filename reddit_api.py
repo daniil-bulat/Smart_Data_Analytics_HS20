@@ -47,8 +47,8 @@ def collectSubData(subm):
 
 def updateSubs_file():
     upload_count = 0
-    location = '/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Group Project/Reference_Project/Reddit_API/'
-    filename = 'reddit_eth.csv'
+    location = '/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/data'
+    filename = 'reddit_eth.csv' # 'reddit_bitcoin.csv
     file = location + filename
     with open(file, 'w', newline='', encoding='utf-8') as file:
         a = csv.writer(file, delimiter=',')
