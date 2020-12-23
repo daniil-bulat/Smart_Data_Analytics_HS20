@@ -21,7 +21,11 @@ from os import path
 from PIL import Image
 from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
 import matplotlib.pyplot as plt
-% matplotlib inline
+#% matplotlib inline
+from statistics import mean
+import statsmodels.api as sm
+from statsmodels.sandbox.regression.predstd import wls_prediction_std
+
 
 os.chdir("/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/data")
  
@@ -249,11 +253,10 @@ plt.axis("off")
 plt.show()
 
 ##############################################################################
-
 # gca stands for 'get current axis'
 ax = plt.gca()
 
-dayly_returns.plot(y="ETH polarity score")
+daily_returns.plot(y="ETH polarity score")
 
 plt.show()
 
@@ -319,10 +322,6 @@ count_graph(" (Positive, Ethereum)",neg_eth)
 
 
 #================================= OLS =======================================
-from statistics import mean
-import statsmodels.api as sm
-from statsmodels.sandbox.regression.predstd import wls_prediction_std
-
 ### Bitcoin
 n = len(btc["Close"])
 

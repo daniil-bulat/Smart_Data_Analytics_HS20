@@ -4,7 +4,7 @@ title: |
   Smart Data Analytics: Prediction of Bitcoin and Ethereum Returns using Subreddits
 author: "Luca Riboni, Daniil Bulat"
 date: "December 2020"
-output: beamer_presentation
+output: html_document
 ---
 
 
@@ -39,7 +39,19 @@ Therefore, Reddit submissions were chosen as predictors for this project.
 
 ## Sentiment Analysis
 
+## Word Clouds
+
 ## OLS Regression
+# Bitcoin
+```{r pressure, echo=FALSE, fig.cap="OLS Regression Bitcoin", out.width = '80%'}
+setwd("/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/images")
+knitr::include_graphics("btc_ols.png")
+```
+# Ethereum
+```{r pressure2, echo=FALSE, fig.cap="OLS Regression Ethereum", out.width = '80%'}
+setwd("/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/images")
+knitr::include_graphics("eth_ols.png")
+```
 
 ## Results
 
