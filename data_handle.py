@@ -238,6 +238,7 @@ btc_wordcloud = WordCloud(collocations=False, stopwords=btc_stopwords, backgroun
 plt.imshow(btc_wordcloud, interpolation='bilinear')
 plt.axis("off")
 plt.show()
+plt.close()
 
 ## ETH
 eth_text = " ".join(review for review in df_ETH["Full Text"])
@@ -251,6 +252,7 @@ eth_wordcloud = WordCloud(collocations=False, stopwords=eth_stopwords, backgroun
 plt.imshow(eth_wordcloud, interpolation='bilinear')
 plt.axis("off")
 plt.show()
+plt.close()
 
 ##############################################################################
 # gca stands for 'get current axis'

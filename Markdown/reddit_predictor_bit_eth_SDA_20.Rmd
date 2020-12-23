@@ -40,16 +40,23 @@ Therefore, Reddit submissions were chosen as predictors for this project.
 ## Sentiment Analysis
 
 ## Word Clouds
+### BTC
+```{r btc_wc, echo=FALSE, fig.cap="Bitcoin Wordcloud", out.width = '80%'}
+knitr::include_graphics("btc_wordcloud.png")
+```
+
+### ETH
+```{r eth_wc, echo=FALSE, fig.cap="Ethereum Wordcloud", out.width = '80%'}
+knitr::include_graphics("eth_wordcloud.png")
+```
 
 ## OLS Regression
-# Bitcoin
-```{r pressure, echo=FALSE, fig.cap="OLS Regression Bitcoin", out.width = '80%'}
-setwd("/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/images")
+### Bitcoin Regression
+```{r btc_ols, echo=FALSE, fig.cap="OLS Regression Bitcoin", out.width = '80%'}
 knitr::include_graphics("btc_ols.png")
 ```
-# Ethereum
-```{r pressure2, echo=FALSE, fig.cap="OLS Regression Ethereum", out.width = '80%'}
-setwd("/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/images")
+### Ethereum Regression
+```{r eth_ols, echo=FALSE, fig.cap="OLS Regression Ethereum", out.width = '80%'}
 knitr::include_graphics("eth_ols.png")
 ```
 
