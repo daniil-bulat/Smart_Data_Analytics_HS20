@@ -62,11 +62,11 @@ def updateSubs_file():
 
 #=================================    SCRAPING   =============================
 endpoint = "submission" # comment; submission; subreddit
-sub ='ethereum'
+sub ='ethereum' # 'bitcoin'
 # for timestamp (dates) use: https://www.unixtimestamp.com/index.php
-before = "1606780800"
-after = "1420070400"
-query = "ethereum"
+before = "1606780800" # 01.12.2020
+after = "1420070400"  # 01.01.2015
+query = "ethereum" # 'bitcoin'
 size = "10000"
 subCount = 0
 subStats = {}

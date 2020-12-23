@@ -1,10 +1,10 @@
 ---
 title: |
   ![](unisg_logo.jpg){width=1in}  
-  Prediction of Bitcoin and Ethereum Returns using Subreddits
+  Smart Data Analytics: Prediction of Bitcoin and Ethereum Returns using Subreddits
 author: "Luca Riboni, Daniil Bulat"
 date: "December 2020"
-output: html_document
+output: beamer_presentation
 ---
 
 
