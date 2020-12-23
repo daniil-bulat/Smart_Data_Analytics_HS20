@@ -86,7 +86,7 @@ def polarity_check(dict, article):
     print('The list of found negative words:', neg_words)
     polarity_score = (pos_count - neg_count) /(pos_count + neg_count)
     print(polarity_score)
-    results = [polarity_score]
+    results = [polarity_score],pos_words,neg_words #add pos and neg_words
     
     return results
 
@@ -98,7 +98,7 @@ def data_handle(data, currency, df_currency):
     scores = []
     for i in df_currency[:,7]:
         try:
-            scores.append(polarity_check(dictionary,i))
+            scores.append(polarity_check(dictionary,i)[0])#add [0]
 
         except:
             scores.append("0")
@@ -120,7 +120,37 @@ def data_handle(data, currency, df_currency):
     results= df_currency, dayly_mean_currency, monthly_mean_currency, weekly_mean_currency
     return results
 
+def clouds(data):
+    text = " ".join(review for review in data["words"])
 
+# Create and generate a word cloud image:
+    stopwords_ = set(STOPWORDS)
+    stopwords_.update(["use","game","Please","nan"])
+
+    wordcloud = WordCloud(collocations=False, stopwords=stopwords_, background_color="white").generate(text)
+
+    plt.imshow(wordcloud, interpolation='bilinear')
+    plt.axis("off")
+    a=plt.show()
+    return a
+
+
+
+def count_graph(title,data):
+    counts_ = collections.Counter(data["words"])
+    clean_ = pd.DataFrame(counts_.most_common(15),
+                             columns=['words', 'count'])
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    clean_.sort_values(by='count').plot.barh(x='words',
+                      y='count',
+                      ax=ax,
+                      color="purple")
+
+    ax.set_title("Common Words Found on Reddit"+str(title))
+
+    a=plt.show()
+    return a
 
 
 
@@ -197,7 +227,7 @@ btc_text = " ".join(review for review in df_BTC["Full Text"])
 
 # Create and generate a word cloud image:
 btc_stopwords = set(STOPWORDS)
-btc_stopwords.update(["New","will","way","use","one","nan","https"])
+btc_stopwords.update(["New","will","way","use","one","nan","https","removed","deleted"])
 
 btc_wordcloud = WordCloud(collocations=False, stopwords=btc_stopwords, background_color="white").generate(btc_text)
 
@@ -210,26 +240,155 @@ eth_text = " ".join(review for review in df_ETH["Full Text"])
 
 # Create and generate a word cloud image:
 eth_stopwords = set(STOPWORDS)
-eth_stopwords.update(["use","game","Please","nan"])
+eth_stopwords.update(["use","game","Please","nan","removed","deleted","https"])
 
-eth_wordcloud = WordCloud(collocations=False, eth_stopwords=stopwords, background_color="white").generate(eth_text)
+eth_wordcloud = WordCloud(collocations=False, stopwords=eth_stopwords, background_color="white").generate(eth_text)
 
 plt.imshow(eth_wordcloud, interpolation='bilinear')
 plt.axis("off")
 plt.show()
 
+##############################################################################
+
+# gca stands for 'get current axis'
+ax = plt.gca()
+
+dayly_returns.plot(y="ETH polarity score")
+
+plt.show()
+
+btc_part1=df_BTC.iloc[0:100000, 7]
+btc_part2=df_BTC.iloc[100000:180000, 7]
+btc_part3=df_BTC.iloc[180000:254526, 7]
+
+df_ETH["Full Text"].to_csv('eth_fulltext.txt', header=True, index=False, sep='\t', mode='w')
+df_BTC["Full Text"].to_csv('btc_fulltext.txt', header=True, index=False, sep='\t', mode='w')
+
+btc_part1.to_csv('btc_fulltext1.txt', header=True, index=False, sep='\t', mode='w')
+btc_part2.to_csv('btc_fulltext2.txt', header=True, index=False, sep='\t', mode='w')
+btc_part3.to_csv('btc_fulltext3.txt', header=True, index=False, sep='\t', mode='w')
+
+
+with open("eth_fulltext.txt", "r", encoding ="utf8") as current_file: 
+        text_eth = current_file.read() 
+        text_eth = text_eth.replace("\n", "").replace("\r", "") 
+
+with open("btc_fulltext1.txt", "r", encoding ="utf8") as current_file: 
+        text_btc1 = current_file.read() 
+        text_btc1 = text_btc1.replace("\n", "").replace("\r", "") 
+with open("btc_fulltext2.txt", "r", encoding ="utf8") as current_file: 
+        text_btc2 = current_file.read() 
+        text_btc2 = text_btc2.replace("\n", "").replace("\r", "") 
+with open("btc_fulltext3.txt", "r", encoding ="utf8") as current_file: 
+        text_btc3 = current_file.read() 
+        text_btc3 = text_btc3.replace("\n", "").replace("\r", "") 
+
+pos_eth=polarity_check(dictionary,text_eth)[1]
+neg_eth=polarity_check(dictionary,text_eth)[2]
+
+pos_btc1=polarity_check(dictionary,text_btc1)[1]
+neg_btc1=polarity_check(dictionary,text_btc1)[2]
+pos_btc2=polarity_check(dictionary,text_btc2)[1]
+neg_btc2=polarity_check(dictionary,text_btc2)[2]
+pos_btc3=polarity_check(dictionary,text_btc3)[1]
+neg_btc3=polarity_check(dictionary,text_btc3)[2]
+
+pos_btc = pos_btc1 +pos_btc2 +pos_btc3
+neg_btc = neg_btc1 +neg_btc2 +neg_btc3
+
+pos_btc =pd.DataFrame(pos_btc)
+neg_btc=pd.DataFrame(neg_btc)
+pos_eth =pd.DataFrame(pos_eth)
+neg_eth=pd.DataFrame(neg_eth)
+
+pos_btc.columns=["words"]
+neg_btc.columns=["words"]
+pos_eth.columns=["words"]
+neg_eth.columns=["words"]
+
+clouds(pos_btc)
+clouds(neg_btc)
+clouds(pos_eth)
+clouds(neg_eth)
+
+count_graph(" (Positive, Bitcoin)",pos_btc)
+count_graph(" (Negative, Bitcoin)",neg_btc)
+count_graph(" (Positive, Ethereum)",pos_eth)
+count_graph(" (Positive, Ethereum)",neg_eth)
+
 
 
 #================================= OLS =======================================
+from statistics import mean
 import statsmodels.api as sm
 from statsmodels.sandbox.regression.predstd import wls_prediction_std
 
+### Bitcoin
+n = len(btc["Close"])
+
+btc_ols_var = pd.DataFrame([])
+btc_ols_var["daily score"] = daily_mean_BTC["Polarity score"]
+
+## Weekly Time Series of Polarity Scores
+weekly_ts = np.zeros([n,1])
+for i in range(0,n-7):
+  weekly_ts[i+7] = mean(btc_ols_var["daily score"][i:i+7])
+
+btc_ols_var["weekly score"] = weekly_ts
+
+## Monthly Time Series of Polarity Scores
+monthly_ts = np.zeros([n,1])
+for i in range(0,n-30):
+  monthly_ts[i+30] = mean(btc_ols_var["daily score"][i:i+30])
+
+btc_ols_var["monthly score"] = monthly_ts
+
+## Add constant
+btc_ols_var = sm.add_constant(btc_ols_var)
+
+btc_ols_var = btc_ols_var.iloc[30:,]
+y_btc = btc["Close"].pct_change()
+y_btc = y_btc.iloc[30:,]
+
+
+## OLS Model
+results = sm.OLS(y_btc, btc_ols_var).fit()
+print(results.summary())
 
 
 
 
+### Ethereum
+n = len(eth["Close"])
+
+eth_ols_var = pd.DataFrame([])
+eth_ols_var["daily score"] = daily_mean_ETH["Polarity score"]
+
+## Weekly Time Series of Polarity Scores
+weekly_ts = np.zeros([n,1])
+for i in range(0,n-7):
+  weekly_ts[i+7] = mean(eth_ols_var["daily score"][i:i+7])
+
+eth_ols_var["weekly score"] = weekly_ts
+
+## Monthly Time Series of Polarity Scores
+monthly_ts = np.zeros([n,1])
+for i in range(0,n-30):
+  monthly_ts[i+30] = mean(eth_ols_var["daily score"][i:i+30])
+
+eth_ols_var["monthly score"] = monthly_ts
+
+## Add constant
+eth_ols_var = sm.add_constant(eth_ols_var)
+
+eth_ols_var = eth_ols_var.iloc[219:,]
+y_eth = eth["Close"].pct_change()
+y_eth = y_eth.iloc[219:,]
 
 
+## OLS Model
+results = sm.OLS(y_eth, eth_ols_var).fit()
+print(results.summary())
 
 
 
