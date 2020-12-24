@@ -319,7 +319,7 @@ clouds(neg_eth)
 count_graph(" (Positive, Bitcoin)",pos_btc)
 count_graph(" (Negative, Bitcoin)",neg_btc)
 count_graph(" (Positive, Ethereum)",pos_eth)
-count_graph(" (Positive, Ethereum)",neg_eth)
+count_graph(" (Negative, Ethereum)",neg_eth)
 
 
 
