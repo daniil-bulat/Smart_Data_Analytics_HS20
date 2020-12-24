@@ -261,7 +261,21 @@ ax = plt.gca()
 daily_returns.plot(y="ETH polarity score")
 
 plt.show()
+ax = plt.gca()
 
+dayly_returns.plot(y="BTC polarity score")
+
+plt.show()
+ax = plt.gca()
+
+dayly_returns.plot(y="BTC")
+
+plt.show()
+ax = plt.gca()
+
+dayly_returns.plot(y="ETH")
+
+plt.show()
 btc_part1=df_BTC.iloc[0:100000, 7]
 btc_part2=df_BTC.iloc[100000:180000, 7]
 btc_part3=df_BTC.iloc[180000:254526, 7]
@@ -319,7 +333,7 @@ clouds(neg_eth)
 count_graph(" (Positive, Bitcoin)",pos_btc)
 count_graph(" (Negative, Bitcoin)",neg_btc)
 count_graph(" (Positive, Ethereum)",pos_eth)
-count_graph(" (Positive, Ethereum)",neg_eth)
+count_graph(" (Negative, Ethereum)",neg_eth)
 
 
 
