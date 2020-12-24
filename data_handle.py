@@ -191,7 +191,6 @@ for line in f:
 
 
 
-
 #============================ Sentiment Analysis =============================
 df_BTC, daily_mean_BTC, monthly_mean_BTC, weekly_mean_BTC = data_handle("reddit_bitcoin.csv", "BTC", "df_BTC")
 df_ETH, daily_mean_ETH, monthly_mean_ETH, weekly_mean_ETH = data_handle("reddit_eth.csv", "ETH", "df_ETH")
