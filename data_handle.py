@@ -90,7 +90,7 @@ def polarity_check(dict, article):
     print('The list of found negative words:', neg_words)
     polarity_score = (pos_count - neg_count) /(pos_count + neg_count)
     print(polarity_score)
-    results = [polarity_score],pos_words,neg_words #add pos and neg_words
+    results = [polarity_score],pos_words,neg_words 
     
     return results
 
@@ -102,7 +102,7 @@ def data_handle(data, currency, df_currency):
     scores = []
     for i in df_currency[:,7]:
         try:
-            scores.append(polarity_check(dictionary,i)[0])#add [0]
+            scores.append(polarity_check(dictionary,i)[0])
 
         except:
             scores.append("0")
@@ -253,8 +253,7 @@ plt.axis("off")
 plt.show()
 plt.close()
 
-##############################################################################
-# gca stands for 'get current axis'
+#graphs
 ax = plt.gca()
 
 daily_returns.plot(y="ETH polarity score")
@@ -368,8 +367,6 @@ y_btc = y_btc.iloc[30:,]
 ## OLS Model
 results = sm.OLS(y_btc, btc_ols_var).fit()
 print(results.summary())
-
-
 
 
 ### Ethereum
