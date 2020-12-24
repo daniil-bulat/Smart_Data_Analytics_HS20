@@ -4,7 +4,7 @@ title: |
   Smart Data Analytics: Prediction of Bitcoin and Ethereum Returns using Subreddits
 author: "Luca Riboni, Daniil Bulat"
 date: "December 2020"
-output: html_document
+output: beamer_presentation
 ---
 
 
@@ -40,23 +40,32 @@ Therefore, Reddit submissions were chosen as predictors for this project.
 ## Sentiment Analysis
 
 ## Word Clouds
-### BTC
-```{r btc_wc, echo=FALSE, fig.cap="Bitcoin Wordcloud", out.width = '80%'}
+The wordclouds on the following slides show accumilations of the most used words in the Bitcoin and Ethereum
+Subreddits from 2015 to 2020, with the exclusion of selected stopwords.
+
+
+## Bitcoin Wordcloud
+```{r btc_wc, echo=FALSE, fig.cap="", out.width = '80%'}
 knitr::include_graphics("btc_wordcloud.png")
 ```
 
-### ETH
-```{r eth_wc, echo=FALSE, fig.cap="Ethereum Wordcloud", out.width = '80%'}
+
+## Ethereum Wordcloud
+```{r eth_wc, echo=FALSE, fig.cap="", out.width = '80%'}
 knitr::include_graphics("eth_wordcloud.png")
 ```
 
 ## OLS Regression
-### Bitcoin Regression
+An OLS regression was preformed with daily returns of the crypto currencies as the 
+dependent variable and daily, weekly and monthly polarity scores as the three 
+independent variables.
+
+## Bitcoin OLS Regression
 ```{r btc_ols, echo=FALSE, fig.cap="OLS Regression Bitcoin", out.width = '80%'}
 knitr::include_graphics("btc_ols.png")
 ```
-### Ethereum Regression
-```{r eth_ols, echo=FALSE, fig.cap="OLS Regression Ethereum", out.width = '80%'}
+## Ethereum OLS Regression
+```{r eth_ols, echo=FALSE, fig.cap="OLS Regression Ethereum", out.width = '79%'}
 knitr::include_graphics("eth_ols.png")
 ```
 
