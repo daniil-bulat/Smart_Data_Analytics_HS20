@@ -1,6 +1,6 @@
 #=============================================================================
 #=============================================================================
-#                              Reddit Reader
+#             BTC and ETH Predictions using Reddit Submissions
 #                          Smart Data Analytics
 #                         Universität St. Gallen
 #
@@ -17,14 +17,14 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import os
+import collections
 from os import path
 from PIL import Image
-from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+from wordcloud import WordCloud, STOPWORDS
 import matplotlib.pyplot as plt
-#% matplotlib inline
+%matplotlib inline
 from statistics import mean
 import statsmodels.api as sm
-from statsmodels.sandbox.regression.predstd import wls_prediction_std
 
 
 os.chdir("/Users/danielbulat/Desktop/Uni/HS20/SmartDataAnalytics/Smart_Data_Analytics_HS20/data")
